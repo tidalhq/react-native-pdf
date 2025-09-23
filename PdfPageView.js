@@ -50,4 +50,4 @@ PdfPageView.defaultProps = {
     style: {}
 };
 
-let PdfPageViewCustom = requireNativeComponent('RCTPdfPageView', PdfPageView, {nativeOnly: {}});
+let PdfPageViewCustom = requireNativeComponent('RNPDFPdfPageView', PdfPageView, {nativeOnly: {}});

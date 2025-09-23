@@ -406,6 +406,36 @@ export default class Pdf extends Component {
     };
 
     render() {
+        if (!this.state.isDownloaded) {
+            return (
+                <View
+                    style={[styles.progressContainer, this.props.progressContainerStyle]}
+                >
+                    {
+                        this.props.renderActivityIndicator ?
+                            this.props.renderActivityIndicator(this.state.progress) :
+                            <Text>{`${(this.state.progress * 100).toFixed(2)}%`}</Text>
+                    }
+                </View>
+            )};
+  
+          if ((Platform.OS === "ios" && this.props.renderPageOverlay) || Platform.OS === "android") {
+            return (
+                <PdfView
+                    ref={component => (this._root = component)}
+                    {...this.props}
+                    style={[{backgroundColor: '#EEE',overflow: 'hidden'}, this.props.style]}
+                    path={this.state.path}
+                    onLoadComplete={this.props.onLoadComplete}
+                    onPageChanged={this.props.onPageChanged}
+                    onError={this._onError}
+                    onPageSingleTap={this.props.onPageSingleTap}
+                    onScaleChanged={this.props.onScaleChanged}
+                    onPressLink={this.props.onPressLink}
+                />
+            )
+        }
+
         if (Platform.OS === "android" || Platform.OS === "ios" || Platform.OS === "windows") {
                 return (
                     <View style={[this.props.style,{overflow: 'hidden'}]}>
