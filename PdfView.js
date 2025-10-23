@@ -8,7 +8,7 @@
 
 'use strict';
 import React, {Component} from 'react';
-import {ScrollView, View, StyleSheet} from 'react-native';
+import {View, StyleSheet} from 'react-native';
 import {ViewPropTypes} from 'deprecated-react-native-prop-types';
 import PropTypes from 'prop-types';
 
@@ -42,6 +42,8 @@ export default class PdfView extends Component {
         onScaleChanged: PropTypes.func,
         showsHorizontalScrollIndicator: PropTypes.bool,
         showsVerticalScrollIndicator: PropTypes.bool,
+        renderPageOverlay: PropTypes.func,
+        customFlatListWrapper: PropTypes.func,
     };
 
     static defaultProps = {
@@ -66,6 +68,8 @@ export default class PdfView extends Component {
         },
         showsHorizontalScrollIndicator: true,
         showsVerticalScrollIndicator: true,
+        renderPageOverlay: undefined,
+        customFlatListWrapper: undefined,
     };
 
     constructor(props) {
@@ -264,35 +268,55 @@ export default class PdfView extends Component {
     };
 
     _renderItem = ({item, index}) => {
+        const pageWidth = this._getPageWidth();
+        const pageHeight = this._getPageHeight();
+        const pageNumber = item.key + 1;
+
         const pageView = (
             <PdfPageView
                 accessible={true}
-                key={item.id}
+                key={`pdf-page-${pageNumber}`}
                 fileNo={this.state.fileNo}
-                page={item.key + 1}
-                width={this._getPageWidth()}
-                height={this._getPageHeight()}
+                page={pageNumber}
+                width={pageWidth}
+                height={pageHeight}
             />
-        )
+        );
+
+        const overlayView = this.props.renderPageOverlay ? (
+            <View
+                pointerEvents={this.props.enableDoubleTapZoom === false ? 'auto' : 'box-none'}
+                style={{position: 'absolute', left: 0, top: 0, width: pageWidth, height: pageHeight}}
+            >
+                {this.props.renderPageOverlay({ width: pageWidth, height: pageHeight, page: pageNumber })}
+            </View>
+        ) : null;
 
         if (this.props.singlePage) {
             return (
-                <View style={{flexDirection: this.props.horizontal ? 'row' : 'column'}} >
-                    {pageView}
+                <View style={{flexDirection: this.props.horizontal ? 'row' : 'column'}}>
+                    <View style={{width: pageWidth, height: pageHeight}}>
+                        {pageView}
+                        {overlayView}
+                    </View>
                 </View>
-            )
+            );
         }
 
         return (
-            <DoubleTapView style={{flexDirection: this.props.horizontal ? 'row' : 'column'}}
-                           onSingleTap={(x, y) => {
-                               this._onItemSingleTap(index, x, y);
-                           }}
-                           onDoubleTap={() => {
-                               this._onItemDoubleTap(index);
-                           }}
+            <DoubleTapView
+                style={{flexDirection: this.props.horizontal ? 'row' : 'column'}}
+                onSingleTap={(x, y) => {
+                    this._onItemSingleTap(index, x, y);
+                }}
+                onDoubleTap={() => {
+                    this._onItemDoubleTap(index);
+                }}
             >
-                {pageView}
+                <View style={{width: pageWidth, height: pageHeight}}>
+                    {pageView}
+                    {overlayView}
+                </View>
                 {(index !== this.state.numberOfPages - 1) && this._renderSeparator()}
             </DoubleTapView>
         );
@@ -346,33 +370,32 @@ export default class PdfView extends Component {
             }
         }
 
+        const props = {
+            ref: this._getRef,
+            style: [styles.container, this.props.style],
+            pagingEnabled: this.props.enablePaging,
+            horizontal: this.props.horizontal,
+            data: data,
+            renderItem: this._renderItem,
+            keyExtractor: this._keyExtractor,
+            windowSize: 3,
+            getItemLayout: this._getItemLayout,
+            maxToRenderPerBatch: 1,
+            initialScrollIndex: this.props.page < 1 ? 0 : this.props.page - 1,
+            onViewableItemsChanged: this._onViewableItemsChanged,
+            viewabilityConfig: VIEWABILITYCONFIG,
+            onScroll: this._onScroll,
+            onContentSizeChange: this._onListContentSizeChange,
+            scrollEnabled: !this.props.singlePage,
+        }
+
+        if (this.props.customFlatListWrapper) {
+            return this.props.customFlatListWrapper(props);
+        }
+
         return (
             <PdfViewFlatList
-                ref={this._getRef}
-                style={[styles.container, this.props.style]}
-                pagingEnabled={this.props.enablePaging}
-                contentContainerStyle={[{
-                    justifyContent: 'center',
-                    alignItems: 'center'
-                }, this.props.horizontal ? {height: this.state.contentContainerSize.height * this.state.scale} : {width: this.state.contentContainerSize.width * this.state.scale}]}
-                horizontal={this.props.horizontal}
-                data={data}
-                renderItem={this._renderItem}
-                keyExtractor={this._keyExtractor}
-                windowSize={11}
-                getItemLayout={this._getItemLayout}
-                maxToRenderPerBatch={1}
-                renderScrollComponent={(props) => <ScrollView
-                    {...props}
-                    centerContent={this.state.centerContent}
-                    pinchGestureEnabled={false}
-                />}
-                initialScrollIndex={this.props.page < 1 ? 0 : this.props.page - 1}
-                onViewableItemsChanged={this._onViewableItemsChanged}
-                viewabilityConfig={VIEWABILITYCONFIG}
-                onScroll={this._onScroll}
-                onContentSizeChange={this._onListContentSizeChange}
-                scrollEnabled={!this.props.singlePage}
+                {...props}
             />
         );
 

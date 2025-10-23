@@ -63,6 +63,19 @@ export interface PdfProps {
     onPageSingleTap?: (page: number, x: number, y: number) => void,
     onScaleChanged?: (scale: number) => void,
     onPressLink?: (url: string) => void,
+
+    /**
+     * Render a React overlay above each PDF page. The overlay will be sized to the
+     * fitted page width/height (after current scale and fitPolicy) and scrolls together
+     * with the page when using the JS FlatList renderer.
+    */
+    renderPageOverlay?: (args: { width: number; height: number; page: number; }) => React.ReactNode;
+
+    /**
+     * Custom FlatList wrapper to render the list of PDF pages
+     * Useful for when opening the PDF in a modal and you want to avoid conflicting scroll gestures
+     */
+    customFlatListWrapper?: (props: any) => React.ReactNode;
 }
 
 export interface PdfRef {
