@@ -67,6 +67,16 @@ public class PdfManagerModule extends ReactContextBaseJavaModule {
         }
     }
 
+    @ReactMethod
+    public void closeFile(int id, Promise promise) {
+        try {
+            PdfDocumentRegistry.close(id);
+            promise.resolve(null);
+        } catch (Throwable t) {
+            promise.reject("E_CLOSE", t);
+        }
+    }
+
     private ParcelFileDescriptor openFileDescriptor(String pathOrUri) throws IOException {
         if (pathOrUri == null) throw new FileNotFoundException("null path");
         Uri uri = Uri.parse(pathOrUri);
@@ -81,6 +91,14 @@ public class PdfManagerModule extends ReactContextBaseJavaModule {
             return desc;
         }
         throw new FileNotFoundException("Unsupported URI scheme: " + uri.getScheme());
+    }
+
+    @Override
+    public void onCatalystInstanceDestroy() {
+        super.onCatalystInstanceDestroy();
+        try {
+            PdfDocumentRegistry.closeAll();
+        } catch (Throwable ignored) {}
     }
 }
 
