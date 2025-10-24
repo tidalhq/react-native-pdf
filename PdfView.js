@@ -161,7 +161,14 @@ export default class PdfView extends Component {
         this._mounted = false;
         clearTimeout(this._scaleTimer);
         clearTimeout(this._scrollTimer);
-
+        const id = this.state.fileNo;
+        if (typeof id === 'number' && id > 0) {
+            try {
+                PdfManager.closeFile(id);
+            } catch (e) {
+                // ignore
+            }
+        }
     }
 
     _keyExtractor = (item, index) => "pdf-page-" + index;

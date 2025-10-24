@@ -23,4 +23,14 @@ export default class PdfManager {
 
         return PdfManagerNative.loadFile(path, password);
     }
+
+    static closeFile(id) {
+        if (typeof id !== 'number') {
+            throw new TypeError('id must be a number.');
+        }
+        if (PdfManagerNative.closeFile) {
+            return PdfManagerNative.closeFile(id);
+        }
+        return Promise.resolve();
+    }
 }
