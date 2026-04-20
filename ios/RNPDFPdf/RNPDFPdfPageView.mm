@@ -45,7 +45,7 @@
 
 - (void)drawInContext:(CGContextRef)context
 {
-    CGRect _viewFrame = _parentView.frame;
+    CGRect _viewFrame = _parentView.bounds;
     CGPDFDocumentRef pdfRef= [PdfManager getPdf:_parentView.fileNo];
     if (pdfRef!=NULL)
     {
