@@ -72,8 +72,11 @@ export interface PdfProps {
     renderPageOverlay?: (args: { width: number; height: number; page: number; }) => React.ReactNode;
 
     /**
-     * Custom FlatList wrapper to render the list of PDF pages
-     * Useful for when opening the PDF in a modal and you want to avoid conflicting scroll gestures
+     * Custom FlatList wrapper to render the list of PDF pages.
+     * Default multi-page rendering still supports pinch zoom. When a custom wrapper
+     * is provided (for example in modal / bottom-sheet integrations), the JS
+     * renderer disables pinch zoom so the wrapper can own scroll/gesture handling
+     * without conflicting with PinchZoomView's PanResponder.
      */
     customFlatListWrapper?: (props: any) => React.ReactNode;
 }

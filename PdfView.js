@@ -447,17 +447,28 @@ export default class PdfView extends Component {
         });
     };
 
+    _shouldEnablePinchZoom = () => {
+        // Default multi-page rendering still supports pinch zoom. The exception is
+        // customFlatListWrapper: wrappers such as RNGH FlatList install their own
+        // gesture handlers, which can conflict with this outer PanResponder-based
+        // PinchZoomView and lead to unreliable pinch events/crashes.
+        return !this.props.singlePage && !this.props.customFlatListWrapper;
+    };
 
     render() {
-        if (this.props.singlePage) {
+        const content = this.state.pdfLoaded && this._renderList();
+
+        // singlePage already skipped pinch before; customFlatListWrapper now also
+        // intentionally bypasses PinchZoomView so the wrapper can own gestures.
+        if (!this._shouldEnablePinchZoom()) {
             return (
                 <View
                     style={styles.container}
                     onLayout={this._onLayout}
                 >
-                    {this.state.pdfLoaded && this._renderList()}
+                    {content}
                 </View>
-            )
+            );
         }
 
         return (
@@ -466,10 +477,9 @@ export default class PdfView extends Component {
                 onLayout={this._onLayout}
                 onScaleChanged={this._onScaleChanged}
             >
-                {this.state.pdfLoaded && this._renderList()}
+                {content}
             </PinchZoomView>
         );
-
     }
 
 }
