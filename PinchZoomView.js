@@ -36,7 +36,7 @@ export default class PinchZoomView extends Component {
         this.distant = 0;
         this.gestureHandlers = PanResponder.create({
             onStartShouldSetPanResponder: this._handleStartShouldSetPanResponder,
-            onMoveShouldSetResponderCapture: (evt, gestureState) => (true),
+            onMoveShouldSetResponderCapture: this._handleMoveShouldSetResponderCapture,
             onMoveShouldSetPanResponder: this._handleMoveShouldSetPanResponder,
             onPanResponderGrant: this._handlePanResponderGrant,
             onPanResponderMove: this._handlePanResponderMove,
@@ -55,19 +55,48 @@ export default class PinchZoomView extends Component {
 
     };
 
+    _getPinchTouches = (e) => {
+        const touches = e?.nativeEvent?.touches;
+        if (!Array.isArray(touches) || touches.length < 2) {
+            return null;
+        }
+        const firstTouch = touches[0];
+        const secondTouch = touches[1];
+        if (!firstTouch || !secondTouch) {
+            return null;
+        }
+        if (typeof firstTouch.pageX !== 'number' || typeof firstTouch.pageY !== 'number'
+            || typeof secondTouch.pageX !== 'number' || typeof secondTouch.pageY !== 'number') {
+            return null;
+        }
+        return [firstTouch, secondTouch];
+    };
+
+
+    _handleMoveShouldSetResponderCapture = (e, gestureState) => {
+
+        return this.props.scalable && this._getPinchTouches(e) !== null;
+
+    };
+
     _handleMoveShouldSetPanResponder = (e, gestureState) => {
 
-        return this.props.scalable && (e.nativeEvent.changedTouches.length >= 2 || gestureState.numberActiveTouches >= 2);
+        return this.props.scalable
+            && (this._getPinchTouches(e) !== null || (gestureState && gestureState.numberActiveTouches >= 2));
 
     };
 
     _handlePanResponderGrant = (e, gestureState) => {
 
-        if (e.nativeEvent.changedTouches.length >= 2 || gestureState.numberActiveTouches >= 2) {
-            let dx = Math.abs(e.nativeEvent.touches[0].pageX - e.nativeEvent.touches[1].pageX);
-            let dy = Math.abs(e.nativeEvent.touches[0].pageY - e.nativeEvent.touches[1].pageY);
-            this.distant = Math.sqrt(dx * dx + dy * dy);
+        const pinchTouches = this._getPinchTouches(e);
+        if (!pinchTouches) {
+            this.distant = 0;
+            return;
         }
+
+        let dx = Math.abs(pinchTouches[0].pageX - pinchTouches[1].pageX);
+        let dy = Math.abs(pinchTouches[0].pageY - pinchTouches[1].pageY);
+        this.distant = Math.sqrt(dx * dx + dy * dy);
 
     };
 
@@ -85,20 +114,31 @@ export default class PinchZoomView extends Component {
 
     _handlePanResponderMove = (e, gestureState) => {
 
-        if ((e.nativeEvent.changedTouches.length >= 2 || gestureState.numberActiveTouches >= 2) && this.distant > 100) {
+        const pinchTouches = this._getPinchTouches(e);
+        if (!pinchTouches) {
+            this.distant = 0;
+            return;
+        }
 
-            let dx = Math.abs(e.nativeEvent.touches[0].pageX - e.nativeEvent.touches[1].pageX);
-            let dy = Math.abs(e.nativeEvent.touches[0].pageY - e.nativeEvent.touches[1].pageY);
-            let distant = Math.sqrt(dx * dx + dy * dy);
+        let dx = Math.abs(pinchTouches[0].pageX - pinchTouches[1].pageX);
+        let dy = Math.abs(pinchTouches[0].pageY - pinchTouches[1].pageY);
+        let distant = Math.sqrt(dx * dx + dy * dy);
+
+        if (this.distant <= 0) {
+            this.distant = distant;
+            return;
+        }
+
+        if (this.distant > 100) {
             let scale = (distant / this.distant);
-            let pageX = (e.nativeEvent.touches[0].pageX + e.nativeEvent.touches[1].pageX) / 2;
-            let pageY = (e.nativeEvent.touches[0].pageY + e.nativeEvent.touches[1].pageY) / 2;
+            let pageX = (pinchTouches[0].pageX + pinchTouches[1].pageX) / 2;
+            let pageY = (pinchTouches[0].pageY + pinchTouches[1].pageY) / 2;
             let pinchInfo = {scale: scale, pageX: pageX, pageY: pageY};
 
             this.props.onScaleChanged(pinchInfo);
-            this.distant = distant;
-
         }
+
+        this.distant = distant;
 
     };
 
