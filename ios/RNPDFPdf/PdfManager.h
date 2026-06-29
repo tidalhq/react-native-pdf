@@ -15,9 +15,11 @@
 #import "RCTBridgeModule.h"
 #endif
 
+@class PDFDocument;
 
 @interface PdfManager : NSObject <RCTBridgeModule>
 
 + (CGPDFDocumentRef) getPdf:(NSUInteger) index;
++ (PDFDocument *) getPdfDocument:(NSUInteger) index;
 
 @end

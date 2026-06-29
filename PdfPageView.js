@@ -44,7 +44,8 @@ PdfPageView.propTypes = {
     fileNo: PropTypes.number,
     page: PropTypes.number,
     width: PropTypes.number,
-    height: PropTypes.number
+    height: PropTypes.number,
+    enableAnnotationRendering: PropTypes.bool,
 };
 
 PdfPageView.defaultProps = {

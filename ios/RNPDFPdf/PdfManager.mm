@@ -9,6 +9,7 @@
 
 
 #import "PdfManager.h"
+#import <PDFKit/PDFKit.h>
 
 #if __has_include(<React/RCTAssert.h>)
 #import <React/RCTUtils.h>
@@ -18,6 +19,7 @@
 
 
 static NSMutableArray *pdfDocRefs = Nil;
+static NSMutableArray *pdfDocuments = Nil;
 
 @implementation PdfManager
 
@@ -45,6 +47,9 @@ RCT_EXPORT_METHOD(loadFile:(NSString *)path
     if (pdfDocRefs==Nil) {
         pdfDocRefs = [NSMutableArray arrayWithCapacity:1];
     }
+    if (pdfDocuments==Nil) {
+        pdfDocuments = [NSMutableArray arrayWithCapacity:1];
+    }
 
     int numberOfPages = 0;
 
@@ -62,6 +67,7 @@ RCT_EXPORT_METHOD(loadFile:(NSString *)path
         
         NSURL *pdfURL = [NSURL fileURLWithPath:finalPath];
         CGPDFDocumentRef pdfRef = CGPDFDocumentCreateWithURL((__bridge CFURLRef) pdfURL);
+        PDFDocument *pdfDocument = [[PDFDocument alloc] initWithURL:pdfURL];
 
         if (pdfRef == NULL) {
             reject(RCTErrorUnspecified, [NSString stringWithFormat:@"Load pdf failed. path=%s",path.UTF8String], nil);
@@ -72,13 +78,18 @@ RCT_EXPORT_METHOD(loadFile:(NSString *)path
 
             bool isUnlocked = CGPDFDocumentUnlockWithPassword(pdfRef, [password UTF8String]);
             if (!isUnlocked) {
+                CGPDFDocumentRelease(pdfRef);
                 reject(RCTErrorUnspecified, @"Password required or incorrect password.", nil);
                 return;
             }
 
         }
+        if (pdfDocument != nil && pdfDocument.isLocked) {
+            [pdfDocument unlockWithPassword:password];
+        }
 
         [pdfDocRefs addObject:[NSValue valueWithPointer:pdfRef]];
+        [pdfDocuments addObject:pdfDocument ?: [NSNull null]];
 
         numberOfPages = (int)CGPDFDocumentGetNumberOfPages(pdfRef);
         CGPDFPageRef pdfPage = CGPDFDocumentGetPage(pdfRef, 1);
@@ -108,12 +119,28 @@ RCT_EXPORT_METHOD(loadFile:(NSString *)path
 + (CGPDFDocumentRef) getPdf:(NSUInteger) index
 {
     if (pdfDocRefs && [pdfDocRefs count]>index){
+        id item = [pdfDocRefs objectAtIndex:index];
+        if (![item isKindOfClass:[NSValue class]]) {
+            return NULL;
+        }
 
-        return (CGPDFDocumentRef)[(NSValue *)[pdfDocRefs objectAtIndex:index] pointerValue];
+        return (CGPDFDocumentRef)[(NSValue *)item pointerValue];
 
     }
 
     return NULL;
+}
+
++ (PDFDocument *) getPdfDocument:(NSUInteger) index
+{
+    if (pdfDocuments && [pdfDocuments count]>index){
+        id item = [pdfDocuments objectAtIndex:index];
+        if ([item isKindOfClass:[PDFDocument class]]) {
+            return (PDFDocument *)item;
+        }
+    }
+
+    return nil;
 }
 
 - (instancetype)init
@@ -131,20 +158,46 @@ RCT_EXPORT_METHOD(loadFile:(NSString *)path
     return YES;
 }
 
+RCT_EXPORT_METHOD(closeFile:(nonnull NSNumber *)fileNo
+                  resolve:(RCTPromiseResolveBlock)resolve
+                  reject:(RCTPromiseRejectBlock)reject
+                  )
+{
+    NSUInteger index = [fileNo unsignedIntegerValue];
+    if (pdfDocRefs && [pdfDocRefs count]>index) {
+        id item = [pdfDocRefs objectAtIndex:index];
+        if ([item isKindOfClass:[NSValue class]]) {
+            CGPDFDocumentRef pdfItem = (CGPDFDocumentRef)[(NSValue *)item pointerValue];
+            if (pdfItem != NULL) {
+                CGPDFDocumentRelease(pdfItem);
+            }
+        }
+        [pdfDocRefs replaceObjectAtIndex:index withObject:[NSNull null]];
+    }
+    if (pdfDocuments && [pdfDocuments count]>index) {
+        [pdfDocuments replaceObjectAtIndex:index withObject:[NSNull null]];
+    }
+
+    resolve([NSNull null]);
+}
+
 
 - (void)dealloc
 {
     // release pdf docs
-    for(NSValue *item in pdfDocRefs) {
-        CGPDFDocumentRef pdfItem = (CGPDFDocumentRef)[item pointerValue];
-        if (pdfItem != NULL) {
+    for(id item in pdfDocRefs) {
+        if ([item isKindOfClass:[NSValue class]]) {
+            CGPDFDocumentRef pdfItem = (CGPDFDocumentRef)[item pointerValue];
+            if (pdfItem != NULL) {
 
-            CGPDFDocumentRelease(pdfItem);
-            pdfItem = NULL;
+                CGPDFDocumentRelease(pdfItem);
+                pdfItem = NULL;
 
+            }
         }
     }
     pdfDocRefs = Nil;
+    pdfDocuments = Nil;
 
 }
 

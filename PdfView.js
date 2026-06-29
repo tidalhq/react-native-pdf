@@ -8,7 +8,7 @@
 
 'use strict';
 import React, {Component} from 'react';
-import {View, StyleSheet} from 'react-native';
+import {Platform, View, StyleSheet} from 'react-native';
 import {ViewPropTypes} from 'deprecated-react-native-prop-types';
 import PropTypes from 'prop-types';
 
@@ -42,6 +42,7 @@ export default class PdfView extends Component {
         onScaleChanged: PropTypes.func,
         showsHorizontalScrollIndicator: PropTypes.bool,
         showsVerticalScrollIndicator: PropTypes.bool,
+        enableAnnotationRendering: PropTypes.bool,
         renderPageOverlay: PropTypes.func,
         customFlatListWrapper: PropTypes.func,
     };
@@ -68,6 +69,7 @@ export default class PdfView extends Component {
         },
         showsHorizontalScrollIndicator: true,
         showsVerticalScrollIndicator: true,
+        enableAnnotationRendering: true,
         renderPageOverlay: undefined,
         customFlatListWrapper: undefined,
     };
@@ -162,7 +164,7 @@ export default class PdfView extends Component {
         clearTimeout(this._scaleTimer);
         clearTimeout(this._scrollTimer);
         const id = this.state.fileNo;
-        if (typeof id === 'number' && id > 0) {
+        if (typeof id === 'number' && id >= 0) {
             try {
                 PdfManager.closeFile(id);
             } catch (e) {
@@ -287,6 +289,9 @@ export default class PdfView extends Component {
                 page={pageNumber}
                 width={pageWidth}
                 height={pageHeight}
+                {...(Platform.OS === 'ios'
+                    ? {enableAnnotationRendering: this.props.enableAnnotationRendering}
+                    : undefined)}
             />
         );
 
