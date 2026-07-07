@@ -8,6 +8,7 @@
 
 #import "PdfManager.h"
 #import "RNPDFPdfPageView.h"
+#import <PDFKit/PDFKit.h>
 
 #import <Foundation/Foundation.h>
 #import <QuartzCore/QuartzCore.h>
@@ -115,6 +116,22 @@
 
             // draw the content to context
             CGContextDrawPDFPage(context, pdfPage);
+
+            if (_parentView.enableAnnotationRendering) {
+                PDFDocument *pdfDocument = [PdfManager getPdfDocument:_parentView.fileNo];
+                // pageAtIndex: raises on an out-of-range index; PDFKit's page
+                // count can differ from CGPDFDocument's for some PDFs.
+                if (pdfDocument != nil &&
+                    _parentView.page >= 1 &&
+                    _parentView.page <= (NSInteger)pdfDocument.pageCount) {
+                    PDFPage *pdfKitPage = [pdfDocument pageAtIndex:_parentView.page - 1];
+                    for (PDFAnnotation *annotation in pdfKitPage.annotations) {
+                        if (annotation.shouldDisplay) {
+                            [annotation drawWithBox:kPDFDisplayBoxMediaBox inContext:context];
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -171,6 +188,10 @@ using namespace facebook::react;
         _page = newProps.page;
         [updatedPropNames addObject:@"page"];
     }
+    if (_enableAnnotationRendering != newProps.enableAnnotationRendering) {
+        _enableAnnotationRendering = newProps.enableAnnotationRendering;
+        [updatedPropNames addObject:@"enableAnnotationRendering"];
+    }
 
     [super updateProps:props oldProps:oldProps];
     [self didSetProps:updatedPropNames];
@@ -210,6 +231,7 @@ using namespace facebook::react;
 {
     _fileNo = -1;
     _page = 1;
+    _enableAnnotationRendering = YES;
     [self refreshLayer];
 }
 
