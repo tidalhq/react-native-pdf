@@ -119,10 +119,16 @@
 
             if (_parentView.enableAnnotationRendering) {
                 PDFDocument *pdfDocument = [PdfManager getPdfDocument:_parentView.fileNo];
-                PDFPage *pdfKitPage = [pdfDocument pageAtIndex:_parentView.page - 1];
-                for (PDFAnnotation *annotation in pdfKitPage.annotations) {
-                    if (annotation.shouldDisplay) {
-                        [annotation drawWithBox:kPDFDisplayBoxMediaBox inContext:context];
+                // pageAtIndex: raises on an out-of-range index; PDFKit's page
+                // count can differ from CGPDFDocument's for some PDFs.
+                if (pdfDocument != nil &&
+                    _parentView.page >= 1 &&
+                    _parentView.page <= (NSInteger)pdfDocument.pageCount) {
+                    PDFPage *pdfKitPage = [pdfDocument pageAtIndex:_parentView.page - 1];
+                    for (PDFAnnotation *annotation in pdfKitPage.annotations) {
+                        if (annotation.shouldDisplay) {
+                            [annotation drawWithBox:kPDFDisplayBoxMediaBox inContext:context];
+                        }
                     }
                 }
             }
