@@ -27,6 +27,21 @@ export type Source = {
     method?: string;
 };
 
+export type PdfError = Error & {
+    status?: number;
+};
+
+export type TextSelectionChangeEvent = {
+  nativeEvent:
+    | {
+        type: 'selectionCleared';
+      }
+    | {
+        type: 'selectionChanged';
+        text: string;
+      };
+};
+
 export interface PdfProps {
     style?: ReactNative.StyleProp<ReactNative.ViewStyle>,
     progressContainerStyle?: ReactNative.StyleProp<ReactNative.ViewStyle>,
@@ -48,6 +63,10 @@ export interface PdfProps {
     enableAnnotationRendering?: boolean,
     enableDoubleTapZoom?: boolean;
     /**
+     * Only works on iOS. Defaults to `true`.
+     */
+    enableTextSelection?: boolean;
+    /**
      * Fit policy.  This will adjust the initial zoom of the PDF based on the initial size of the view and the scale factor.
      * 0 = fit width
      * 1 = fit height
@@ -59,7 +78,7 @@ export interface PdfProps {
     onLoadProgress?: (percent: number,) => void,
     onLoadComplete?: (numberOfPages: number, path: string, size: {height: number, width: number}, tableContents?: TableContent[]) => void,
     onPageChanged?: (page: number, numberOfPages: number) => void,
-    onError?: (error: object) => void,
+    onError?: (error: PdfError) => void,
     onPageSingleTap?: (page: number, x: number, y: number) => void,
     onScaleChanged?: (scale: number) => void,
     onPressLink?: (url: string) => void,
@@ -79,6 +98,7 @@ export interface PdfProps {
      * without conflicting with PinchZoomView's PanResponder.
      */
     customFlatListWrapper?: (props: any) => React.ReactNode;
+    onTextSelectionChange?: (event: TextSelectionChangeEvent) => void,
 }
 
 export interface PdfRef {

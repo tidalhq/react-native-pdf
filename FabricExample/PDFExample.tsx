@@ -1,284 +1,137 @@
 /**
  * Copyright (c) 2017-present, Wonday (@wonday.org)
- * All rights reserved.
- *
- * This source code is licensed under the MIT-style license found in the
- * LICENSE file in the root directory of this source tree.
+ * Licensed under the MIT license in the root LICENSE file.
  */
+import React, {useRef, useState} from 'react';
+import {FlatList, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import Pdf, {type PdfProps, type PdfRef} from 'react-native-pdf';
 
-import React from 'react';
-import {
-  StyleSheet,
-  TouchableHighlight,
-  Dimensions,
-  View,
-  Text,
-  Platform,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// A bundled fixture avoids depending on third-party PDF servers during QA.
+const source = Platform.OS === 'windows'
+  ? {uri: 'ms-appx:///test.pdf'}
+  : require('./test.pdf');
+const scenarios = ['overlay', 'native', 'wrapper', 'legacy', 'single', 'on-load', 'hidden'] as const;
+type Scenario = typeof scenarios[number];
 
-import Pdf from 'react-native-pdf';
-import Orientation from 'react-native-orientation-locker';
-
-const WIN_WIDTH = Dimensions.get('window').width;
-const WIN_HEIGHT = Dimensions.get('window').height;
-
-type OrientationType =
-  | 'LANDSCAPE-LEFT'
-  | 'LANDSCAPE-RIGHT'
-  | 'PORTRAIT'
-  | string;
-
-interface PDFExampleState {
-  page: number;
-  scale: number;
-  numberOfPages: number;
-  horizontal: boolean;
-  showsHorizontalScrollIndicator: boolean;
-  showsVerticalScrollIndicator: boolean;
-  width: number;
-  objectURL?: string;
-  blob?: Blob;
+function Button({label, onPress}: {label: string; onPress: () => void}) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} testID={label}
+      onPress={onPress} style={styles.button}>
+      <Text>{label}</Text>
+    </Pressable>
+  );
 }
 
-export default class PDFExample extends React.Component<
-  Record<string, never>,
-  PDFExampleState
-> {
-  private pdf: any; // usare `Pdf | null` se le typings del pacchetto esportano il tipo
+const overlay: PdfProps['renderPageOverlay'] = ({page}) => (
+  <View pointerEvents="none" style={styles.overlay}>
+    <Text style={styles.overlayLabel}>Overlay page {page}</Text>
+  </View>
+);
+const customWrapper: PdfProps['customFlatListWrapper'] = props => <FlatList {...props} />;
 
-  constructor(props: Record<string, never>) {
-    super(props);
-    this.state = {
-      page: 1,
-      scale: 1,
-      numberOfPages: 0,
-      horizontal: false,
-      showsHorizontalScrollIndicator: true,
-      showsVerticalScrollIndicator: true,
-      width: WIN_WIDTH,
-    };
-    this.pdf = null;
-  }
+function ScenarioViewer({scenario}: {scenario: Scenario}) {
+  const pdf = useRef<PdfRef>(null);
+  const [observedPage, setObservedPage] = useState(0);
+  const [controlledPage, setControlledPage] = useState(1);
+  const [pages, setPages] = useState(0);
+  const [request, setRequest] = useState('none');
+  const [error, setError] = useState('none');
+  const [visible, setVisible] = useState(scenario !== 'hidden');
+  const [mounted, setMounted] = useState(true);
+  const [horizontal, setHorizontal] = useState(false);
+  const [scale, setScale] = useState(1);
+  const [annotations, setAnnotations] = useState(true);
+  const hasOverlay = scenario !== 'native' && scenario !== 'legacy';
 
-  _onOrientationDidChange = (orientation: OrientationType): void => {
-    if (orientation === 'LANDSCAPE-LEFT' || orientation === 'LANDSCAPE-RIGHT') {
-      this.setState({
-        width: WIN_HEIGHT > WIN_WIDTH ? WIN_HEIGHT : WIN_WIDTH,
-        horizontal: true,
-      });
-    } else {
-      this.setState({
-        width: WIN_HEIGHT > WIN_WIDTH ? WIN_HEIGHT : WIN_WIDTH,
-        horizontal: false,
-      });
-    }
+  const navigate = (page: number) => {
+    setRequest(`setPage(${page})`);
+    // Deliberately do NOT update controlledPage: it would mask #21358.
+    pdf.current?.setPage(page);
   };
 
-  componentDidMount(): void {
-    Orientation.addOrientationListener(this._onOrientationDidChange);
-
-    (async () => {
-      const url = 'https://www.africau.edu/images/default/sample.pdf';
-      // handling blobs larger than 64 KB on Android requires patching React Native (https://github.com/facebook/react-native/pull/31789)
-      const result = await fetch(url);
-      const blob = await result.blob();
-      const objectURL = URL.createObjectURL(blob);
-      this.setState({ ...this.state, objectURL, blob }); // keep blob in state so it doesn't get garbage-collected
-    })();
-  }
-
-  componentWillUnmount(): void {
-    Orientation.removeOrientationListener(this._onOrientationDidChange);
-  }
-
-  prePage = (): void => {
-    const prePage = this.state.page > 1 ? this.state.page - 1 : 1;
-    this.pdf?.setPage(prePage);
-    console.log(`prePage: ${prePage}`);
-  };
-
-  nextPage = (): void => {
-    const nextPage =
-      this.state.page + 1 > this.state.numberOfPages
-        ? this.state.numberOfPages
-        : this.state.page + 1;
-    this.pdf?.setPage(nextPage);
-    console.log(`nextPage: ${nextPage}`);
-  };
-
-  zoomOut = (): void => {
-    const scale = this.state.scale > 1 ? this.state.scale / 1.2 : 1;
-    this.setState({ scale });
-    console.log(`zoomOut scale: ${scale}`);
-  };
-
-  zoomIn = (): void => {
-    let scale = this.state.scale * 1.2;
-    scale = scale > 3 ? 3 : scale;
-    this.setState({ scale });
-    console.log(`zoomIn scale: ${scale}`);
-  };
-
-  switchHorizontal = (): void => {
-    this.setState({ horizontal: !this.state.horizontal, page: this.state.page });
-  };
-
-  switchShowsHorizontalScrollIndicator = (): void => {
-    this.setState({
-      showsHorizontalScrollIndicator: !this.state.showsHorizontalScrollIndicator,
-    });
-  };
-
-  switchShowsVerticalScrollIndicator = (): void => {
-    this.setState({
-      showsVerticalScrollIndicator: !this.state.showsVerticalScrollIndicator,
-    });
-  };
-
-  render(): React.ReactNode {
-    let source: { uri: string; cache?: boolean } =
-      Platform.OS === 'windows'
-        ? { uri: 'ms-appx:///test.pdf' }
-        : { uri: 'https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf', cache: true };
-    // let source = {uri: this.state.objectURL!};
-
-    const Header = () => (
-        <>
-        <View style={{ flexDirection: 'row' }}>
-            <TouchableHighlight
-                disabled={this.state.page === 1}
-                style={this.state.page === 1 ? styles.btnDisable : styles.btn}
-                onPress={() => this.prePage()}
-            >
-                <Text style={styles.btnText}>{'-'}</Text>
-            </TouchableHighlight>
-            <View style={styles.btnText}>
-                <Text style={styles.btnText}>Page</Text>
-            </View>
-            <TouchableHighlight
-                disabled={this.state.page === this.state.numberOfPages}
-                style={
-                this.state.page === this.state.numberOfPages
-                    ? styles.btnDisable
-                    : styles.btn
-                }
-                testID="NextPage"
-                onPress={() => this.nextPage()}
-            >
-                <Text style={styles.btnText}>{'+'}</Text>
-            </TouchableHighlight>
-            <TouchableHighlight
-                disabled={this.state.scale === 1}
-                style={this.state.scale === 1 ? styles.btnDisable : styles.btn}
-                onPress={() => this.zoomOut()}
-            >
-                <Text style={styles.btnText}>{'-'}</Text>
-            </TouchableHighlight>
-            <View style={styles.btnText}>
-                <Text style={styles.btnText}>Scale</Text>
-            </View>
-            <TouchableHighlight
-                disabled={this.state.scale >= 3}
-                style={this.state.scale >= 3 ? styles.btnDisable : styles.btn}
-                onPress={() => this.zoomIn()}
-            >
-                <Text style={styles.btnText}>{'+'}</Text>
-            </TouchableHighlight>
+  return (
+    <View style={styles.viewer}>
+      <Text testID="Status" accessibilityLiveRegion="polite">
+        {`Scenario: ${scenario} | page: ${observedPage}/${pages} | prop: ${controlledPage}`}
+      </Text>
+      <Text testID="Request">{`Request: ${request}`}</Text>
+      <Text testID="Error">{`Error: ${error}`}</Text>
+      <View style={styles.row}>
+        <Button label="Page 1" onPress={() => navigate(1)} />
+        <Button label="Page 2" onPress={() => navigate(2)} />
+        <Button label="Page 3" onPress={() => navigate(3)} />
+        <Button label="Controlled 2" onPress={() => setControlledPage(2)} />
+      </View>
+      <View style={styles.row}>
+        <Button label="Zoom" onPress={() => setScale(value => value === 1 ? 1.5 : 1)} />
+        <Button label="Direction" onPress={() => setHorizontal(value => !value)} />
+        <Button label={visible ? 'Hide' : 'Show'} onPress={() => setVisible(value => !value)} />
+        <Button label={mounted ? 'Unmount' : 'Mount'} onPress={() => {
+          setMounted(value => !value); setObservedPage(0); setPages(0);
+        }} />
+        <Button label="Annotations" onPress={() => setAnnotations(value => !value)} />
+      </View>
+      <Text>{`Scale: ${scale.toFixed(1)} | horizontal: ${horizontal} | annotations: ${annotations}`}</Text>
+      {mounted && (
+        <View style={visible ? styles.pdfContainer : styles.hiddenContainer}>
+          <Pdf
+            ref={pdf}
+            source={source}
+            trustAllCerts={false}
+            page={controlledPage}
+            scale={scale}
+            horizontal={horizontal}
+            singlePage={scenario === 'single'}
+            enableAnnotationRendering={annotations}
+            renderPageOverlay={hasOverlay ? overlay : undefined}
+            customFlatListWrapper={scenario === 'wrapper' ? customWrapper : undefined}
+            {...{usePDFKit: scenario !== 'legacy'}}
+            onLoadComplete={(count: number) => {
+              setPages(count);
+              if (scenario === 'on-load') navigate(2);
+              if (scenario === 'hidden') navigate(3);
+            }}
+            onPageChanged={(page: number) => setObservedPage(page)}
+            onScaleChanged={(value: number) => setScale(value)}
+            onError={(value: unknown) => setError(String(value))}
+            style={styles.pdf}
+          />
         </View>
-        <View style={{ flexDirection: 'row' }}>
-            <View style={styles.btnText}>
-                <Text style={styles.btnText}>{'Horizontal:'}</Text>
-            </View>
-            <TouchableHighlight style={styles.btn} onPress={() => this.switchHorizontal()}>
-                {!this.state.horizontal ? (
-                <Text style={styles.btnText}>{'false'}</Text>
-                ) : (
-                <Text style={styles.btnText}>{'true'}</Text>
-                )}
-            </TouchableHighlight>
-            <View style={styles.btnText}>
-                <Text style={styles.btnText}>{'Scrollbar'}</Text>
-            </View>
-            <TouchableHighlight
-                style={styles.btn}
-                onPress={() => {
-                this.switchShowsHorizontalScrollIndicator();
-                this.switchShowsVerticalScrollIndicator();
-                }}
-            >
-                {!this.state.showsVerticalScrollIndicator ? (
-                <Text style={styles.btnText}>{'hidden'}</Text>
-                ) : (
-                <Text style={styles.btnText}>{'shown'}</Text>
-                )}
-            </TouchableHighlight>
-        </View>
-        </>
-    );
+      )}
+    </View>
+  );
+}
 
-    return (
-      <SafeAreaView style={styles.container} edges={{top: 'maximum'}}>
-        <Header />
-        <View style={{ flex: 1, width: this.state.width }}>
-            <Pdf
-                ref={(pdf: any) => {
-                this.pdf = pdf;
-                }}
-                trustAllCerts={false}
-                source={source}
-                scale={this.state.scale}
-                horizontal={this.state.horizontal}
-                showsVerticalScrollIndicator={this.state.showsVerticalScrollIndicator}
-                showsHorizontalScrollIndicator={this.state.showsHorizontalScrollIndicator}
-                onLoadComplete={(
-                numberOfPages: number,
-                filePath: string,
-                dims: { width: number; height: number },
-                tableContents: unknown
-                ) => {
-                this.setState({
-                    numberOfPages: numberOfPages,
-                });
-                console.log(`total page count: ${numberOfPages}`);
-                console.log(tableContents, dims, filePath);
-                }}
-                onPageChanged={(page: number, numberOfPages: number) => {
-                this.setState({
-                    page: page,
-                });
-                console.log(`current page: ${page} / ${numberOfPages}`);
-                }}
-                onError={(error: unknown) => {
-                console.log(error);
-                }}
-                style={{ flex: 1 }}
-            />
+export default function PDFExample() {
+  const [scenario, setScenario] = useState<Scenario>('overlay');
+  const [revision, setRevision] = useState(0);
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.screen}>
+        <Text style={styles.title}>PDF renderer regression lab</Text>
+        <View style={styles.row}>
+          {scenarios.map(value => (
+            <Button key={value} label={value} onPress={() => {
+              setScenario(value); setRevision(current => current + 1);
+            }} />
+          ))}
         </View>
+        <ScenarioViewer key={`${scenario}-${revision}`} scenario={scenario} />
       </SafeAreaView>
-    );
-  }
+    </SafeAreaProvider>
+  );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    // marginTop: 25,
-  },
-  btn: {
-    margin: 2,
-    padding: 2,
-    backgroundColor: 'aqua',
-  },
-  btnDisable: {
-    margin: 2,
-    padding: 2,
-    backgroundColor: 'gray',
-  },
-  btnText: {
-    margin: 2,
-    padding: 2,
-  },
+  screen: {flex: 1, backgroundColor: '#fff'},
+  title: {fontSize: 18, fontWeight: '600', padding: 8},
+  viewer: {flex: 1},
+  row: {flexDirection: 'row', flexWrap: 'wrap'},
+  button: {backgroundColor: '#d5eefc', padding: 8, margin: 3, borderRadius: 4},
+  pdfContainer: {flex: 1, overflow: 'hidden'},
+  hiddenContainer: {width: 0, height: 0, overflow: 'hidden'},
+  pdf: {flex: 1},
+  overlay: {position: 'absolute', top: 0, left: 0, right: 0, borderWidth: 2, borderColor: '#c00'},
+  overlayLabel: {color: '#900', backgroundColor: '#ffe6e6', alignSelf: 'flex-start'},
 });
