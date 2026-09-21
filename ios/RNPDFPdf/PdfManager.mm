@@ -155,7 +155,7 @@ RCT_EXPORT_METHOD(loadFile:(NSString *)path
 
 + (BOOL)requiresMainQueueSetup
 {
-    return YES;
+    return NO;
 }
 
 RCT_EXPORT_METHOD(closeFile:(nonnull NSNumber *)fileNo

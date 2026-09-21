@@ -168,6 +168,23 @@ react-native run-ios
 ### ChangeLog
 <details>
   <summary>ChangeLog details</summary>
+
+v7.0.5
+1. Security: upgrade shell-quote to 1.8.4 to address CVE-2026-9277 (#1034)
+2. Fixed: restore zoom and scroll offset on Android when the view is re-attached to the window (#1028)
+3. Fixed(ios): allow PDFKit long-press to start text selection (#1032)
+4. Fixed(download): restore missing fetch() call; await temp-file unlink+cp to avoid ENOENT race and unhandled rejection; expose download HTTP status (#1019, #1020, #1031)
+5. Fixed(ios): return NO from `PdfManager` `requiresMainQueueSetup` (#1027)
+6. Fixed: avoid loading legacy PdfView on Fabric path (#1022)
+7. Fixed: flow type and stylesheet import (#678)
+8. Chore(deps): bump example deps in FabricExample (`json`, `concurrent-ruby`) (#1029,#1025)
+
+v7.0.4
+1. Fixed: Android PDF crash: IllegalStateException: Already closed (#989) (#999)
+2. Fixed: scrollTop on initial render on iOS (#1001)
+3. Feature(ios): add text selection support via PDFKit (#1003)
+
+
 v7.0.3
 1. Fixed: RefObject types, and setPage not working in android (#985)
 

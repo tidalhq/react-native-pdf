@@ -264,6 +264,9 @@ using namespace facebook::react;
     _showsHorizontalScrollIndicator = YES;
     _showsVerticalScrollIndicator = YES;
     _scrollEnabled = YES;
+    _enableTextSelection = YES;
+    _selectedText = nil;
+    _currentPDFSelection = nil;
 
     // init and config PDFView
     _pdfView = [[PDFView alloc] initWithFrame:CGRectMake(0, 0, 500, 500)];
@@ -300,6 +303,12 @@ using namespace facebook::react;
     }
 
     [self bindTap];
+
+    // Register for selection change notifications
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                         selector:@selector(handleSelectionChanged:)
+                                             name:PDFViewSelectionChangedNotification
+                                           object:_pdfView];
 }
 
 - (void)PDFViewWillClickOnLink:(PDFView *)sender withURL:(NSURL *)url
@@ -309,6 +318,28 @@ using namespace facebook::react;
                      [[NSString alloc] initWithString:
                       [NSString stringWithFormat:
                        @"linkPressed|%s", _url.UTF8String]]];
+}
+
+- (void)handleSelectionChanged:(NSNotification *)notification
+{
+    if (!_enableTextSelection || notification.object != _pdfView) return;
+
+    // Store a copy of the selection to avoid it being cleared
+    _currentPDFSelection = [_pdfView.currentSelection copy];
+
+    if (_currentPDFSelection && _currentPDFSelection.string.length > 0) {
+        _selectedText = _currentPDFSelection.string;
+
+        // Use the existing onChange callback with a message format
+        [self notifyOnChangeWithMessage:
+         [[NSString alloc] initWithString:
+          [NSString stringWithFormat:@"textSelected|%@", _selectedText]]];
+    } else {
+        _selectedText = nil;
+
+        // Use the existing onChange callback for clearing
+        [self notifyOnChangeWithMessage:@"textSelectionCleared"];
+    }
 }
 
 - (void)didSetProps:(NSArray<NSString *> *)changedProps
@@ -508,13 +539,15 @@ using namespace facebook::react;
 
             PDFPage *pdfPage = [_pdfDocument pageAtIndex:_page-1];
             if (pdfPage && _page == 1) {
-                // goToDestination() would be better. However, there is an
-                // error in the pointLeftTop computation that often results in
-                // scrolling to the middle of the page.
-                // Special case workaround to make starting at the first page
-                // align acceptably.
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [self->_pdfView goToRect:CGRectMake(0, NSUIntegerMax, 1, 1) onPage:pdfPage];
+                    [self->_pdfView goToFirstPage:nil];
+                    for (UIView *subview in self->_pdfView.subviews) {
+                        if ([subview isKindOfClass:[UIScrollView class]]) {
+                            UIScrollView *scrollView = (UIScrollView *)subview;
+                            [scrollView setContentOffset:CGPointMake(0, 0) animated:NO];
+                            break;
+                        }
+                    }
                 });
             } else if (pdfPage) {
                 CGRect pdfPageRect = [pdfPage boundsForBox:kPDFDisplayBoxCropBox];
@@ -574,6 +607,7 @@ using namespace facebook::react;
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PDFViewDocumentChangedNotification" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PDFViewPageChangedNotification" object:nil];
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PDFViewScaleChangedNotification" object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:PDFViewSelectionChangedNotification object:nil];
 
     _doubleTapRecognizer = nil;
     _singleTapRecognizer = nil;
@@ -876,6 +910,8 @@ using namespace facebook::react;
     longPressRecognizer.allowableMovement=100;
     // Important: The duration must be long enough to allow taps but not longer than the period in which view opens the magnifying glass
     longPressRecognizer.minimumPressDuration=0.3;
+    // Without a delegate this recognizer excludes PDFKit's own long press, which is what starts a text selection
+    longPressRecognizer.delegate = self;
 
     [self addGestureRecognizer:longPressRecognizer];
     _longPressRecognizer = longPressRecognizer;

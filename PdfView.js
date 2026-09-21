@@ -95,6 +95,7 @@ export default class PdfView extends Component {
         this._scaleTimer = null;
         this._scrollTimer = null;
         this._mounted = false;
+        this._pendingPage = this.props.page;
 
     }
 
@@ -116,7 +117,7 @@ export default class PdfView extends Component {
                         pageAspectRate: pageAspectRatio,
                         pdfPageSize: {width, height},
                         centerContent: numberOfPages > 1 ? false : true
-                    });
+                    }, this._flushPendingPage);
                     if (this.props.onLoadComplete) {
                         this.props.onLoadComplete(numberOfPages, this.props.path, {width, height});
                     }
@@ -126,13 +127,6 @@ export default class PdfView extends Component {
             .catch((error) => {
                 this.props.onError(error);
             });
-
-        clearTimeout(this._scrollTimer);
-        this._scrollTimer = setTimeout(() => {
-            if (this._flatList) {
-                this._flatList.scrollToIndex({animated: false, index: this.props.page < 1 ? 0 : this.props.page - 1});
-            }
-        }, 200);
     }
 
     componentDidUpdate(prevProps) {
@@ -146,21 +140,45 @@ export default class PdfView extends Component {
         }
 
         if (this.props.horizontal !== prevProps.horizontal || this.props.page !== prevProps.page) {
-            let page = (this.props.page) < 1 ? 1 : this.props.page;
-            page = page > this.state.numberOfPages ? this.state.numberOfPages : page;
-
-            if (this._flatList) {
-                clearTimeout(this._scrollTimer);
-                this._scrollTimer = setTimeout(() => {
-                    this._flatList.scrollToIndex({animated: false, index: page - 1});
-                }, 200);
-            }
+            this.setPage(this.props.page);
         }
 
     }
 
+    // Keep the latest request until both the document and list are ready.
+    setPage = (page) => {
+        if (!Number.isInteger(page)) {
+            throw new Error('Specified pageNumber is not a finite integer');
+        }
+        this._pendingPage = page;
+        this._flushPendingPage();
+    };
+
+    _pageIndex = (page) => {
+        if (this.props.singlePage || this.state.numberOfPages < 1) return 0;
+        const requestedPage = Number.isInteger(page) ? page : 1;
+        return Math.max(0, Math.min(requestedPage - 1, this.state.numberOfPages - 1));
+    };
+
+    _canNavigate = () => this._mounted && this.state.pdfLoaded &&
+        this.state.numberOfPages > 0 && this._flatList && this._pendingPage !== null &&
+        this.state.contentContainerSize.width > 0 && this.state.contentContainerSize.height > 0;
+
+    _flushPendingPage = () => {
+        clearTimeout(this._scrollTimer);
+        if (!this._canNavigate()) return;
+
+        this._scrollTimer = setTimeout(() => {
+            if (!this._canNavigate()) return;
+            const index = this._pageIndex(this._pendingPage);
+            this._pendingPage = null;
+            this._flatList.scrollToIndex({animated: false, index});
+        }, 200);
+    };
+
     componentWillUnmount() {
         this._mounted = false;
+        this._pendingPage = null;
         clearTimeout(this._scaleTimer);
         clearTimeout(this._scrollTimer);
         const id = this.state.fileNo;
@@ -352,7 +370,10 @@ export default class PdfView extends Component {
     };
 
 
-    _getRef = (ref) => this._flatList = ref;
+    _getRef = (ref) => {
+        this._flatList = ref;
+        this._flushPendingPage();
+    };
 
     _scrollToContentOffset = (x, y) => {
         if (!this._flatList) {
@@ -423,7 +444,7 @@ export default class PdfView extends Component {
             windowSize: 3,
             getItemLayout: this._getItemLayout,
             maxToRenderPerBatch: 1,
-            initialScrollIndex: this.props.page < 1 ? 0 : this.props.page - 1,
+            initialScrollIndex: this._pageIndex(this._pendingPage ?? this.props.page),
             onViewableItemsChanged: this._onViewableItemsChanged,
             viewabilityConfig: VIEWABILITYCONFIG,
             onScroll: this._onScroll,
@@ -449,7 +470,7 @@ export default class PdfView extends Component {
                 width: event.nativeEvent.layout.width,
                 height: event.nativeEvent.layout.height
             }
-        });
+        }, this._flushPendingPage);
     };
 
     _shouldEnablePinchZoom = () => {
