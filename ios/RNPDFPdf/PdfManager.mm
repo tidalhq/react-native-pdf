@@ -181,29 +181,6 @@ RCT_EXPORT_METHOD(closeFile:(nonnull NSNumber *)fileNo
     resolve([NSNull null]);
 }
 
-RCT_EXPORT_METHOD(closeFile:(nonnull NSNumber *)fileNo
-                  resolve:(RCTPromiseResolveBlock)resolve
-                  reject:(RCTPromiseRejectBlock)reject
-                  )
-{
-    NSUInteger index = [fileNo unsignedIntegerValue];
-    if (pdfDocRefs && [pdfDocRefs count]>index) {
-        id item = [pdfDocRefs objectAtIndex:index];
-        if ([item isKindOfClass:[NSValue class]]) {
-            CGPDFDocumentRef pdfItem = (CGPDFDocumentRef)[(NSValue *)item pointerValue];
-            if (pdfItem != NULL) {
-                CGPDFDocumentRelease(pdfItem);
-            }
-        }
-        [pdfDocRefs replaceObjectAtIndex:index withObject:[NSNull null]];
-    }
-    if (pdfDocuments && [pdfDocuments count]>index) {
-        [pdfDocuments replaceObjectAtIndex:index withObject:[NSNull null]];
-    }
-
-    resolve([NSNull null]);
-}
-
 
 - (void)dealloc
 {
