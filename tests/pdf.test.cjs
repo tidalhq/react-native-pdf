@@ -178,6 +178,16 @@ test('bounds, initial index, and invalid JS page requests', async () => {
     }
 });
 
+test('horizontal lists stay constrained inside the centered pinch container', async () => {
+    const {env, pdf, indices} = await viewer({horizontal: true});
+    const list = pdf._renderList();
+    assert.equal(list.props.style[0].alignSelf, 'stretch');
+    assert.equal(list.props.horizontal, true);
+    pdf.setPage(2); env.timers.run();
+    assert.deepEqual(indices, [1]);
+    assert.equal(pdf._getItemLayout(null, 1).offset, pdf._getPageWidth() + pdf.props.spacing);
+});
+
 test('singlePage stays at index zero; unmount cancels pending navigation', async () => {
     const {env, pdf, indices} = await viewer({singlePage: true, page: 4});
     assert.equal(pdf._renderList().props.initialScrollIndex, 0);

@@ -435,7 +435,9 @@ export default class PdfView extends Component {
 
         const props = {
             ref: this._getRef,
-            style: [styles.container, this.props.style],
+            // PinchZoomView centers its children; keep the list viewport bounded
+            // instead of allowing horizontal content to determine its width.
+            style: [styles.list, this.props.style],
             pagingEnabled: this.props.enablePaging,
             horizontal: this.props.horizontal,
             data: data,
@@ -513,5 +515,9 @@ export default class PdfView extends Component {
 const styles = StyleSheet.create({
     container: {
         flex: 1
+    },
+    list: {
+        flex: 1,
+        alignSelf: 'stretch'
     }
 });
