@@ -31,5 +31,17 @@ target 'FabricExample' do
       :mac_catalyst_enabled => false,
       # :ccache_enabled => true
     )
+
+    # RN normalizes native pod targets, but not their privacy resource bundles.
+    # Keep those bundles within the same supported deployment range as the app.
+    installer.pods_project.native_targets.each do |target|
+      next unless target.product_type == 'com.apple.product-type.bundle'
+
+      target.build_configurations.each do |config|
+        current = config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] || min_ios_version_supported
+        config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] =
+          [Gem::Version.new(current), Gem::Version.new(min_ios_version_supported)].max.to_s
+      end
+    end
   end
 end

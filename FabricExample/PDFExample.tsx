@@ -1,294 +1,137 @@
 /**
  * Copyright (c) 2017-present, Wonday (@wonday.org)
- * All rights reserved.
- *
- * This source code is licensed under the MIT-style license found in the
- * LICENSE file in the root directory of this source tree.
+ * Licensed under the MIT license in the root LICENSE file.
  */
+import React, {useRef, useState} from 'react';
+import {FlatList, Platform, Pressable, StyleSheet, Text, View} from 'react-native';
+import {SafeAreaProvider, SafeAreaView} from 'react-native-safe-area-context';
+import Pdf, {type PdfProps, type PdfRef} from 'react-native-pdf';
 
-import React, { useEffect, useRef, useState } from 'react';
-import {
-  StyleSheet,
-  TouchableHighlight,
-  View,
-  Text,
-  Platform,
-  useWindowDimensions,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+// A bundled fixture avoids depending on third-party PDF servers during QA.
+const source = Platform.OS === 'windows'
+  ? {uri: 'ms-appx:///test.pdf'}
+  : require('./test.pdf');
+const scenarios = ['overlay', 'native', 'wrapper', 'legacy', 'single', 'on-load', 'hidden'] as const;
+type Scenario = typeof scenarios[number];
 
-import Pdf, { type PdfRef } from 'react-native-pdf';
-
-interface PDFHeaderProps {
-  page: number;
-  scale: number;
-  numberOfPages: number;
-  horizontal: boolean;
-  showsVerticalScrollIndicator: boolean;
-  onPrePage: () => void;
-  onNextPage: () => void;
-  onZoomOut: () => void;
-  onZoomIn: () => void;
-  onSwitchHorizontal: () => void;
-  onToggleScrollbars: () => void;
+function Button({label, onPress}: {label: string; onPress: () => void}) {
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={label} testID={label}
+      onPress={onPress} style={styles.button}>
+      <Text>{label}</Text>
+    </Pressable>
+  );
 }
 
-const createWidthStyles = (width: number) =>
-  StyleSheet.create({
-    pdfContainer: {
-      flex: 1,
-      width,
-    },
-  });
-
-const PDFHeader = ({
-  page,
-  scale,
-  numberOfPages,
-  horizontal,
-  showsVerticalScrollIndicator,
-  onPrePage,
-  onNextPage,
-  onZoomOut,
-  onZoomIn,
-  onSwitchHorizontal,
-  onToggleScrollbars,
-}: PDFHeaderProps) => (
-  <>
-    <View style={styles.row}>
-      <TouchableHighlight
-        disabled={page === 1}
-        style={page === 1 ? styles.btnDisable : styles.btn}
-        onPress={onPrePage}
-      >
-        <Text style={styles.btnText}>{'-'}</Text>
-      </TouchableHighlight>
-      <View style={styles.btnText}>
-        <Text style={styles.btnText}>Page</Text>
-      </View>
-      <TouchableHighlight
-        disabled={page === numberOfPages}
-        style={page === numberOfPages ? styles.btnDisable : styles.btn}
-        testID="NextPage"
-        onPress={onNextPage}
-      >
-        <Text style={styles.btnText}>{'+'}</Text>
-      </TouchableHighlight>
-      <TouchableHighlight
-        disabled={scale === 1}
-        style={scale === 1 ? styles.btnDisable : styles.btn}
-        onPress={onZoomOut}
-      >
-        <Text style={styles.btnText}>{'-'}</Text>
-      </TouchableHighlight>
-      <View style={styles.btnText}>
-        <Text style={styles.btnText}>Scale</Text>
-      </View>
-      <TouchableHighlight
-        disabled={scale >= 3}
-        style={scale >= 3 ? styles.btnDisable : styles.btn}
-        onPress={onZoomIn}
-      >
-        <Text style={styles.btnText}>{'+'}</Text>
-      </TouchableHighlight>
-    </View>
-    <View style={styles.row}>
-      <View style={styles.btnText}>
-        <Text style={styles.btnText}>{'Horizontal:'}</Text>
-      </View>
-      <TouchableHighlight style={styles.btn} onPress={onSwitchHorizontal}>
-        {!horizontal ? (
-          <Text style={styles.btnText}>{'false'}</Text>
-        ) : (
-          <Text style={styles.btnText}>{'true'}</Text>
-        )}
-      </TouchableHighlight>
-      <View style={styles.btnText}>
-        <Text style={styles.btnText}>{'Scrollbar'}</Text>
-      </View>
-      <TouchableHighlight style={styles.btn} onPress={onToggleScrollbars}>
-        {!showsVerticalScrollIndicator ? (
-          <Text style={styles.btnText}>{'hidden'}</Text>
-        ) : (
-          <Text style={styles.btnText}>{'shown'}</Text>
-        )}
-      </TouchableHighlight>
-    </View>
-  </>
+const overlay: PdfProps['renderPageOverlay'] = ({page}) => (
+  <View pointerEvents="none" style={styles.overlay}>
+    <Text style={styles.overlayLabel}>Overlay page {page}</Text>
+  </View>
 );
+const customWrapper: PdfProps['customFlatListWrapper'] = props => <FlatList {...props} />;
 
-const PDFExample = () => {
-  const pdfRef = useRef<PdfRef | null>(null);
-  const objectUrlRef = useRef<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [scale, setScale] = useState(1);
-  const [numberOfPages, setNumberOfPages] = useState(0);
+function ScenarioViewer({scenario}: {scenario: Scenario}) {
+  const pdf = useRef<PdfRef>(null);
+  const [observedPage, setObservedPage] = useState(0);
+  const [controlledPage, setControlledPage] = useState(1);
+  const [pages, setPages] = useState(0);
+  const [request, setRequest] = useState('none');
+  const [error, setError] = useState('none');
+  const [visible, setVisible] = useState(scenario !== 'hidden');
+  const [mounted, setMounted] = useState(true);
   const [horizontal, setHorizontal] = useState(false);
-  const [showsHorizontalScrollIndicator, setShowsHorizontalScrollIndicator] =
-    useState(true);
-  const [showsVerticalScrollIndicator, setShowsVerticalScrollIndicator] =
-    useState(true);
+  const [scale, setScale] = useState(1);
+  const [annotations, setAnnotations] = useState(true);
+  const hasOverlay = scenario !== 'native' && scenario !== 'legacy';
 
-  const [, setObjectUrl] = useState<string>();
-  const [, setBlob] = useState<Blob>();
-  const { width } = useWindowDimensions();
-
-  useEffect(() => {
-    let isMounted = true;
-
-    (async () => {
-      const url = 'https://www.africau.edu/images/default/sample.pdf';
-      // handling blobs larger than 64 KB on Android requires patching React Native
-      const result = await fetch(url);
-      const blob = await result.blob();
-      const objectURL = URL.createObjectURL(blob);
-
-      if (!isMounted) {
-        URL.revokeObjectURL(objectURL);
-        return;
-      }
-
-      objectUrlRef.current = objectURL;
-      setBlob(blob); // keep blob in state so it doesn't get garbage-collected
-      setObjectUrl(objectURL);
-    })();
-
-    return () => {
-      isMounted = false;
-
-      if (objectUrlRef.current) {
-        URL.revokeObjectURL(objectUrlRef.current);
-      }
-    };
-  }, []);
-
-  const prePage = (): void => {
-    const previousPage = page > 1 ? page - 1 : 1;
-    pdfRef.current?.setPage(previousPage);
-    console.log(`prePage: ${previousPage}`);
+  const navigate = (page: number) => {
+    setRequest(`setPage(${page})`);
+    // Deliberately do NOT update controlledPage: it would mask #21358.
+    pdf.current?.setPage(page);
   };
-
-  const nextPage = (): void => {
-    const next = page + 1 > numberOfPages ? numberOfPages : page + 1;
-    pdfRef.current?.setPage(next);
-    console.log(`nextPage: ${next}`);
-  };
-
-  const zoomOut = (): void => {
-    const nextScale = scale > 1 ? scale / 1.2 : 1;
-    setScale(nextScale);
-    console.log(`zoomOut scale: ${nextScale}`);
-  };
-
-  const zoomIn = (): void => {
-    let nextScale = scale * 1.2;
-    nextScale = nextScale > 3 ? 3 : nextScale;
-    setScale(nextScale);
-    console.log(`zoomIn scale: ${nextScale}`);
-  };
-
-  const switchHorizontal = (): void => {
-    setHorizontal(currentHorizontal => !currentHorizontal);
-  };
-
-  const switchShowsHorizontalScrollIndicator = (): void => {
-    setShowsHorizontalScrollIndicator(currentValue => !currentValue);
-  };
-
-  const switchShowsVerticalScrollIndicator = (): void => {
-    setShowsVerticalScrollIndicator(currentValue => !currentValue);
-  };
-
-  const source: { uri: string; cache?: boolean } =
-    Platform.OS === 'windows'
-      ? { uri: 'ms-appx:///test.pdf' }
-      : {
-          uri: 'https://ontheline.trincoll.edu/images/bookdown/sample-local-pdf.pdf',
-          cache: true,
-        };
-  // const source = { uri: objectUrl! };
-  const widthStyles = createWidthStyles(width);
 
   return (
-    <SafeAreaView style={styles.container} edges={{ top: 'maximum' }}>
-      <PDFHeader
-        page={page}
-        scale={scale}
-        numberOfPages={numberOfPages}
-        horizontal={horizontal}
-        showsVerticalScrollIndicator={showsVerticalScrollIndicator}
-        onPrePage={prePage}
-        onNextPage={nextPage}
-        onZoomOut={zoomOut}
-        onZoomIn={zoomIn}
-        onSwitchHorizontal={switchHorizontal}
-        onToggleScrollbars={() => {
-          switchShowsHorizontalScrollIndicator();
-          switchShowsVerticalScrollIndicator();
-        }}
-      />
-      <View style={widthStyles.pdfContainer}>
-        <Pdf
-          ref={pdfRef}
-          trustAllCerts={false}
-          source={source}
-          scale={scale}
-          horizontal={horizontal}
-          showsVerticalScrollIndicator={showsVerticalScrollIndicator}
-          showsHorizontalScrollIndicator={showsHorizontalScrollIndicator}
-          onLoadComplete={(
-            loadedNumberOfPages: number,
-            filePath: string,
-            dims: { width: number; height: number },
-            tableContents: unknown,
-          ) => {
-            setNumberOfPages(loadedNumberOfPages);
-            console.log(`total page count: ${loadedNumberOfPages}`);
-            console.log(tableContents, dims, filePath);
-          }}
-          onPageChanged={(currentPage: number, loadedNumberOfPages: number) => {
-            setPage(currentPage);
-            console.log(
-              `current page: ${currentPage} / ${loadedNumberOfPages}`,
-            );
-          }}
-          onError={(error: unknown) => {
-            console.log(error);
-          }}
-          style={styles.pdf}
-        />
+    <View style={styles.viewer}>
+      <Text testID="Status" accessibilityLiveRegion="polite">
+        {`Scenario: ${scenario} | page: ${observedPage}/${pages} | prop: ${controlledPage}`}
+      </Text>
+      <Text testID="Request">{`Request: ${request}`}</Text>
+      <Text testID="Error">{`Error: ${error}`}</Text>
+      <View style={styles.row}>
+        <Button label="Page 1" onPress={() => navigate(1)} />
+        <Button label="Page 2" onPress={() => navigate(2)} />
+        <Button label="Page 3" onPress={() => navigate(3)} />
+        <Button label="Controlled 2" onPress={() => setControlledPage(2)} />
       </View>
-    </SafeAreaView>
+      <View style={styles.row}>
+        <Button label="Zoom" onPress={() => setScale(value => value === 1 ? 1.5 : 1)} />
+        <Button label="Direction" onPress={() => setHorizontal(value => !value)} />
+        <Button label={visible ? 'Hide' : 'Show'} onPress={() => setVisible(value => !value)} />
+        <Button label={mounted ? 'Unmount' : 'Mount'} onPress={() => {
+          setMounted(value => !value); setObservedPage(0); setPages(0);
+        }} />
+        <Button label="Annotations" onPress={() => setAnnotations(value => !value)} />
+      </View>
+      <Text>{`Scale: ${scale.toFixed(1)} | horizontal: ${horizontal} | annotations: ${annotations}`}</Text>
+      {mounted && (
+        <View style={visible ? styles.pdfContainer : styles.hiddenContainer}>
+          <Pdf
+            ref={pdf}
+            source={source}
+            trustAllCerts={false}
+            page={controlledPage}
+            scale={scale}
+            horizontal={horizontal}
+            singlePage={scenario === 'single'}
+            enableAnnotationRendering={annotations}
+            renderPageOverlay={hasOverlay ? overlay : undefined}
+            customFlatListWrapper={scenario === 'wrapper' ? customWrapper : undefined}
+            {...{usePDFKit: scenario !== 'legacy'}}
+            onLoadComplete={(count: number) => {
+              setPages(count);
+              if (scenario === 'on-load') navigate(2);
+              if (scenario === 'hidden') navigate(3);
+            }}
+            onPageChanged={(page: number) => setObservedPage(page)}
+            onScaleChanged={(value: number) => setScale(value)}
+            onError={(value: unknown) => setError(String(value))}
+            style={styles.pdf}
+          />
+        </View>
+      )}
+    </View>
   );
-};
+}
 
-export default PDFExample;
+export default function PDFExample() {
+  const [scenario, setScenario] = useState<Scenario>('overlay');
+  const [revision, setRevision] = useState(0);
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.screen}>
+        <Text style={styles.title}>PDF renderer regression lab</Text>
+        <View style={styles.row}>
+          {scenarios.map(value => (
+            <Button key={value} label={value} onPress={() => {
+              setScenario(value); setRevision(current => current + 1);
+            }} />
+          ))}
+        </View>
+        <ScenarioViewer key={`${scenario}-${revision}`} scenario={scenario} />
+      </SafeAreaView>
+    </SafeAreaProvider>
+  );
+}
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    // marginTop: 25,
-  },
-  btn: {
-    margin: 2,
-    padding: 2,
-    backgroundColor: 'aqua',
-  },
-  btnDisable: {
-    margin: 2,
-    padding: 2,
-    backgroundColor: 'gray',
-  },
-  btnText: {
-    margin: 2,
-    padding: 2,
-  },
-  pdf: {
-    flex: 1,
-  },
-  row: {
-    flexDirection: 'row',
-  },
+  screen: {flex: 1, backgroundColor: '#fff'},
+  title: {fontSize: 18, fontWeight: '600', padding: 8},
+  viewer: {flex: 1},
+  row: {flexDirection: 'row', flexWrap: 'wrap'},
+  button: {backgroundColor: '#d5eefc', padding: 8, margin: 3, borderRadius: 4},
+  pdfContainer: {flex: 1, overflow: 'hidden'},
+  hiddenContainer: {width: 0, height: 0, overflow: 'hidden'},
+  pdf: {flex: 1},
+  overlay: {position: 'absolute', top: 0, left: 0, right: 0, borderWidth: 2, borderColor: '#c00'},
+  overlayLabel: {color: '#900', backgroundColor: '#ffe6e6', alignSelf: 'flex-start'},
 });
