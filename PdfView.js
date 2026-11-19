@@ -95,6 +95,9 @@ export default class PdfView extends Component {
         this._scaleTimer = null;
         this._scrollTimer = null;
         this._mounted = false;
+        // The list scrolls to `initialScrollIndex` one time, on the first content size change where it is
+        // more than 0. If it follows `page`, a page from `onPageChanged` moves the list after the mount.
+        this._initialPage = this.props.page;
 
     }
 
@@ -145,7 +148,9 @@ export default class PdfView extends Component {
             });
         }
 
-        if (this.props.horizontal !== prevProps.horizontal || this.props.page !== prevProps.page) {
+        const pageRequested = this.props.page !== prevProps.page && this.props.page !== this.state.currentPage;
+
+        if (this.props.horizontal !== prevProps.horizontal || pageRequested) {
             let page = (this.props.page) < 1 ? 1 : this.props.page;
             page = page > this.state.numberOfPages ? this.state.numberOfPages : page;
 
@@ -423,7 +428,7 @@ export default class PdfView extends Component {
             windowSize: 3,
             getItemLayout: this._getItemLayout,
             maxToRenderPerBatch: 1,
-            initialScrollIndex: this.props.page < 1 ? 0 : this.props.page - 1,
+            initialScrollIndex: this._initialPage < 1 ? 0 : this._initialPage - 1,
             onViewableItemsChanged: this._onViewableItemsChanged,
             viewabilityConfig: VIEWABILITYCONFIG,
             onScroll: this._onScroll,
