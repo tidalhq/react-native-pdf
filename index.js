@@ -120,7 +120,19 @@ export default class Pdf extends Component {
 
         this.lastRNBFTask = null;
 
+        // PDFKit goes to the top of its `page` prop each time the prop changes. A parent can send the
+        // page from `onPageChanged` back as `page`, and that page is not a request to move. Thus PDFKit
+        // gets a page only when the parent chose it: as the first page of a file, then through `setPage`.
+        //
+        // TODO: the better fix is native and needs a new app build. In ios/RNPDFPdf/RNPDFPdfView.mm,
+        // `updateProps` must take `page` only when the prop changed and is not the page that PDFKit shows.
+        // Then PDFKit can get `page` directly, and `_pdfKitPage` and `_reportedPage` can go.
+        this._pdfKitPage = props.page;
+        this._reportedPage = undefined;
+
     }
+
+    _usesPdfKit = () => Platform.OS === "ios" && !this.props.renderPageOverlay && this.props.usePDFKit;
 
     componentDidUpdate(prevProps) {
 
@@ -128,6 +140,8 @@ export default class Pdf extends Component {
         const curSource = Image.resolveAssetSource(prevProps.source);
 
         if ((nextSource.uri !== curSource.uri)) {
+            this._pdfKitPage = this.props.page;
+            this._reportedPage = undefined;
             // if has download task, then cancel it.
             if (this.lastRNBFTask && this.lastRNBFTask.cancel) {
                 this.lastRNBFTask.cancel(err => {
@@ -137,6 +151,8 @@ export default class Pdf extends Component {
             } else {
                 this._loadFromSource(this.props.source);
             }
+        } else if (this._usesPdfKit() && this.props.page !== prevProps.page && this.props.page !== this._reportedPage) {
+            this.setPage(this.props.page);
         }
     }
 
@@ -348,6 +364,8 @@ export default class Pdf extends Component {
         if ( (pageNumber === null) || (isNaN(pageNumber)) ) {
             throw new Error('Specified pageNumber is not a number');
         }
+        // PDFKit compares its `page` prop with the page of the last command, so the prop must follow the command.
+        this._pdfKitPage = pageNumber;
         if (!!global?.nativeFabricUIManager ) {
             if (this._root) {
                 PdfViewCommands.setNativePage(
@@ -385,6 +403,7 @@ export default class Pdf extends Component {
                 tableContents
                 );
             } else if (message[0] === 'pageChanged') {
+                this._reportedPage = Number(message[1]);
                 this.props.onPageChanged && this.props.onPageChanged(Number(message[1]), Number(message[2]));
             } else if (message[0] === 'error') {
                 this._onError(new Error(message[1]));
@@ -460,6 +479,7 @@ export default class Pdf extends Component {
                                                 <PdfCustom
                                                     ref={component => (this._root = component)}
                                                     {...this.props}
+                                                    page={this._pdfKitPage}
                                                     style={[{backgroundColor: '#EEE',overflow: 'hidden'}, this.props.style]}
                                                     path={this.state.path}
                                                     onChange={this._onChange}
